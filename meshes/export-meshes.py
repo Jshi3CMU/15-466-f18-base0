@@ -79,6 +79,9 @@ for name in to_write:
 	index += struct.pack('I', vertex_count)
 	index += struct.pack('I', vertex_count + len(mesh.polygons) * 3)
 
+	#With some inspiration from the game3 code
+	colors = obj.data.vertex_colors.active.data
+    
 	uvs = None
 	if do_texcoord:
 		if len(obj.data.uv_layers) == 0:
@@ -97,9 +100,8 @@ for name in to_write:
 				data += struct.pack('f', x)
 			for x in loop.normal:
 				data += struct.pack('f', x)
-			#TODO: set 'col' based on object's active vertex colors array.
-			# you should be able to use code much like the texcoord code below.
-			col = mathutils.Color((1.0, 1.0, 1.0))
+			#With some inspiration from the game3 code
+			col = colors[poly.loop_indices[i]].color
 			data += struct.pack('BBBB', int(col.r * 255), int(col.g * 255), int(col.b * 255), 255)
 
 			if do_texcoord:

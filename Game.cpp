@@ -173,11 +173,10 @@ Game::Game() {
 			}
 			return f->second;
 		};
-		tile_mesh = lookup("Tile");
-		cursor_mesh = lookup("Cursor");
-		doll_mesh = lookup("Doll");
-		egg_mesh = lookup("Egg");
-		cube_mesh = lookup("Cube");
+		tile_mesh = lookup("Plane");
+		ship_mesh = lookup("Ship");
+		star_mesh = lookup("Star");
+		brick_mesh = lookup("Brick");
 	}
 
 	{ //create vertex array object to hold the map from the mesh vertex buffer to shader program attributes:
@@ -202,16 +201,51 @@ Game::Game() {
 
 	//----------------
 	//set up game board with meshes and rolls:
-	board_meshes.reserve(board_size.x * board_size.y);
-	board_rotations.reserve(board_size.x * board_size.y);
 	std::mt19937 mt(0xbead1234);
 
-	std::vector< Mesh const * > meshes{ &doll_mesh, &egg_mesh, &cube_mesh };
-
-	for (uint32_t i = 0; i < board_size.x * board_size.y; ++i) {
-		board_meshes.emplace_back(meshes[mt()%meshes.size()]);
-		board_rotations.emplace_back(glm::quat());
+    
+    /* initialize random seed: */
+    srand (time(NULL));
+    
+	std::vector< Mesh const * > meshes{&brick_mesh, &star_mesh, &ship_mesh };
+    mesh_array[0] = ship_mesh;
+    mesh_array[1] = star_mesh;
+    mesh_array[2] = brick_mesh;
+    
+    sizes[0] = 1.2f;
+    sizes[1] = .3f;
+    sizes[2] = 3.0f;
+    
+    
+	for (uint32_t i = 0; i < board_size.x; ++i) {
+        for(uint32_t j = 0; j < board_size.y; ++j){
+            board[i][j] = -1;
+        }
 	}
+    
+    ship_x = 4;
+    ship_y = 0;
+    
+    board[4][0] = 0;
+    
+    //fill in board
+    for(uint32_t i = 2; i < board_size.y; i++){
+        int blocks = rand()%3+1;
+        int stars = rand()%2;
+        int num;
+        for(uint32_t j = 0; j < blocks; j++){
+            do{
+                num = rand() % 9;
+            }while(board[num][i] != -1);
+            board[num][i] = 2;
+        }
+        for(uint32_t j = 0; j < stars; j++){
+            do{
+                num = rand() % 9;
+            }while(board[num][i] != -1);
+            board[num][i] = 1;
+        }
+    }
 }
 
 Game::~Game() {
@@ -234,75 +268,111 @@ bool Game::handle_event(SDL_Event const &evt, glm::uvec2 window_size) {
 	}
 	//handle tracking the state of WSAD for roll control:
 	if (evt.type == SDL_KEYDOWN || evt.type == SDL_KEYUP) {
-		if (evt.key.keysym.scancode == SDL_SCANCODE_W) {
-			controls.roll_up = (evt.type == SDL_KEYDOWN);
-			return true;
-		} else if (evt.key.keysym.scancode == SDL_SCANCODE_S) {
-			controls.roll_down = (evt.type == SDL_KEYDOWN);
-			return true;
-		} else if (evt.key.keysym.scancode == SDL_SCANCODE_A) {
-			controls.roll_left = (evt.type == SDL_KEYDOWN);
-			return true;
-		} else if (evt.key.keysym.scancode == SDL_SCANCODE_D) {
-			controls.roll_right = (evt.type == SDL_KEYDOWN);
-			return true;
-		}
-	}
-	//move cursor on L/R/U/D press:
-	if (evt.type == SDL_KEYDOWN && evt.key.repeat == 0) {
 		if (evt.key.keysym.scancode == SDL_SCANCODE_LEFT) {
-			if (cursor.x > 0) {
-				cursor.x -= 1;
-			}
+			controls.left = (evt.type == SDL_KEYDOWN);
 			return true;
 		} else if (evt.key.keysym.scancode == SDL_SCANCODE_RIGHT) {
-			if (cursor.x + 1 < board_size.x) {
-				cursor.x += 1;
-			}
-			return true;
-		} else if (evt.key.keysym.scancode == SDL_SCANCODE_UP) {
-			if (cursor.y + 1 < board_size.y) {
-				cursor.y += 1;
-			}
-			return true;
-		} else if (evt.key.keysym.scancode == SDL_SCANCODE_DOWN) {
-			if (cursor.y > 0) {
-				cursor.y -= 1;
-			}
+			controls.right = (evt.type == SDL_KEYDOWN);
 			return true;
 		}
 	}
+	
 	return false;
 }
 
 void Game::update(float elapsed) {
-	//if the roll keys are pressed, rotate everything on the same row or column as the cursor:
-	glm::quat dr = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-	float amt = elapsed * 1.0f;
-	if (controls.roll_left) {
-		dr = glm::angleAxis(amt, glm::vec3(0.0f, 1.0f, 0.0f)) * dr;
-	}
-	if (controls.roll_right) {
-		dr = glm::angleAxis(-amt, glm::vec3(0.0f, 1.0f, 0.0f)) * dr;
-	}
-	if (controls.roll_up) {
-		dr = glm::angleAxis(amt, glm::vec3(1.0f, 0.0f, 0.0f)) * dr;
-	}
-	if (controls.roll_down) {
-		dr = glm::angleAxis(-amt, glm::vec3(1.0f, 0.0f, 0.0f)) * dr;
-	}
-	if (dr != glm::quat()) {
-		for (uint32_t x = 0; x < board_size.x; ++x) {
-			glm::quat &r = board_rotations[cursor.y * board_size.x + x];
-			r = glm::normalize(dr * r);
-		}
-		for (uint32_t y = 0; y < board_size.y; ++y) {
-			if (y != cursor.y) {
-				glm::quat &r = board_rotations[y * board_size.x + cursor.x];
-				r = glm::normalize(dr * r);
-			}
-		}
-	}
+	//if the arrow keys are pressed, move ship and update board
+	//float amt = elapsed * 1.0f;
+    
+    if(game_over == 1){
+        return;
+    }
+
+    if(controls.left == true && ship_x != 0){
+        board[ship_x][ship_y] = -1;
+        ship_x--;
+        board[ship_x][ship_y] = 0;
+        
+        if(board[ship_x][ship_y + 1] == 1){
+            score++;
+        }
+        if(board[ship_x][ship_y + 1] == 2){
+            lives--;
+            if(lives == 0){
+                game_over = 1;
+            }
+        }
+        //move blocks down
+        for(uint32_t j = 2; j < board_size.y; j++){
+            for(uint32_t i = 0; i < board_size.x ; i++){
+                board[i][j-1] = board[i][j];
+            }
+        }
+        int blocks = rand()%3+1;
+        int stars = rand()%2;
+        int num;
+        for(uint32_t j = 0; j < board_size.x; j++){
+            board[j][8] = -1;
+        }
+        for(uint32_t j = 0; j < blocks; j++){
+            do{
+                num = rand() % 9;
+            }while(board[num][8] != -1);
+            board[num][8] = 2;
+        }
+        for(uint32_t j = 0; j < stars; j++){
+            do{
+                num = rand() % 9;
+            }while(board[num][8] != -1);
+            board[num][8] = 1;
+        }
+    }else if(controls.right == true && ship_x != board_size.x - 1){
+        board[ship_x][ship_y] = -1;
+        ship_x++;
+        board[ship_x][ship_y] = 0;
+        
+        if(board[ship_x][ship_y + 1] == 1){
+            score++;
+        }
+        if(board[ship_x][ship_y + 1] == 2){
+            lives--;
+            if(lives == 0){
+                game_over = 1;
+            }
+        }
+        
+        //move blocks down
+        for(uint32_t j = 2; j < board_size.y; j++){
+            for(uint32_t i = 0; i < board_size.x ; i++){
+                board[i][j-1] = board[i][j];
+            }
+        }
+        int blocks = rand()%3+1;
+        int stars = rand()%2;
+        int num;
+        for(uint32_t j = 0; j < board_size.x; j++){
+            board[j][8] = -1;
+        }
+        for(uint32_t j = 0; j < blocks; j++){
+            do{
+                num = rand() % 9;
+            }while(board[num][8] != -1);
+            board[num][8] = 2;
+        }
+        for(uint32_t j = 0; j < stars; j++){
+            do{
+                num = rand() % 9;
+            }while(board[num][8] != -1);
+            board[num][8] = 1;
+        }
+    }
+    
+    if(score == 49){
+        game_over = 1;
+    }
+    
+    controls.left = false;
+    controls.right = false;
 }
 
 void Game::draw(glm::uvec2 drawable_size) {
@@ -358,37 +428,71 @@ void Game::draw(glm::uvec2 drawable_size) {
 		glDrawArrays(GL_TRIANGLES, mesh.first, mesh.count);
 	};
 
+    //board background
+    draw_mesh(tile_mesh,
+              glm::mat4(
+                        4.5f, 0.0f, 0.0f, 0.0f,
+                        0.0f, 4.6f, 0.0f, 0.0f,
+                        0.0f, 0.0f, 1.0f, 0.0f,
+                        4.5f, 4.55f, -0.1f, 1.0f
+                        )
+              );
+    
+    glm::quat dr = glm::angleAxis(12.0f, glm::vec3(3.0f, 0.0f, 0.0f)) * glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    
+    
+    //actually draw the mesh
 	for (uint32_t y = 0; y < board_size.y; ++y) {
 		for (uint32_t x = 0; x < board_size.x; ++x) {
-			draw_mesh(tile_mesh,
-				glm::mat4(
-					1.0f, 0.0f, 0.0f, 0.0f,
-					0.0f, 1.0f, 0.0f, 0.0f,
-					0.0f, 0.0f, 1.0f, 0.0f,
-					x+0.5f, y+0.5f,-0.5f, 1.0f
-				)
-			);
-			draw_mesh(*board_meshes[y*board_size.x+x],
-				glm::mat4(
-					1.0f, 0.0f, 0.0f, 0.0f,
-					0.0f, 1.0f, 0.0f, 0.0f,
-					0.0f, 0.0f, 1.0f, 0.0f,
-					x+0.5f, y+0.5f, 0.0f, 1.0f
-				)
-				* glm::mat4_cast(board_rotations[y*board_size.x+x])
-			);
+            //objects
+            if(board[x][y] != -1){
+                draw_mesh(mesh_array[board[x][y]],
+                    glm::mat4(
+                          sizes[board[x][y]], 0.0f, 0.0f, 0.0f,
+                          0.0f, sizes[board[x][y]], 0.0f, 0.0f,
+					      0.0f, 0.0f, 1.0f, 0.0f,
+					      x+0.5f, y+0.5f, 0.0f, 1.0f
+				     )
+                * glm::mat4_cast(glm::normalize(dr))
+                );
+            }
 		}
 	}
-	draw_mesh(cursor_mesh,
-		glm::mat4(
-			1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			cursor.x+0.5f, cursor.y+0.5f, 0.0f, 1.0f
-		)
-	);
-
-
+    
+    //draw lives and scores
+    for (uint32_t i = 0; i < lives; i++) {
+        draw_mesh(mesh_array[0],
+                  glm::mat4(
+                            .8f, 0.0f, 0.0f, 0.0f,
+                            0.0f, 0.8f, 0.0f, 0.0f,
+                            0.0f, 0.0f, 1.0f, 0.0f,
+                            i-2.4f, 8.5f, 0.0f, 1.0f
+                            )
+                  * glm::mat4_cast(glm::normalize(dr))
+                  );
+    }
+    
+    int i = 0;
+    float j = 0;
+    for (uint32_t k = 0; k < score; k++) {
+        if(i % 3 == 0 && i != 0){
+            j += .5f;
+            i = 0;
+        }
+        draw_mesh(mesh_array[1],
+                  glm::mat4(
+                            0.2f, 0.0f, 0.0f, 0.0f,
+                            0.0f, 0.2f, 0.0f, 0.0f,
+                            0.0f, 0.0f, 1.0f, 0.0f,
+                            i-2.4f, 7.8f-j, 0.0f, 1.0f
+                            )
+                  * glm::mat4_cast(glm::normalize(dr))
+                  );
+        i++;
+    }
+    
+    
+    
 	glUseProgram(0);
 
 	GL_ERRORS();

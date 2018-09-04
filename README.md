@@ -1,11 +1,14 @@
 # Game Information
-(Note: fill in this portion with information about your game.)
 
-Title: (TODO: your game's title)
+Title: Falling Bricks
 
-Author: (TODO: your name)
+Author: John Shi
 
-Design Document: [TODO: name of design document](TODO: link to design document)
+Worked with Kathleen Ruan (Andrew ID: kruan) on solving some of the difficulties. No specific code used except the changes to export-meshes.py.
+Assets were drawn on my own.
+
+Design Document: Falling Bricks (http://graphics.cs.cmu.edu/courses/15-466-f18/game0-designs/biyuand/)
+Designed by Biyuand
 
 Screen Shot:
 
@@ -13,11 +16,11 @@ Screen Shot:
 
 Difficulties Encountered:
 
-TODO: write several sentences about any difficulties you may have encountered in creating the game.
+Since I do not have a good OpenGL background, I had to do a lot of experimentation with the matrices to get the right look. Also, I had problems in the beginning with Blender. I wasn't sure how to use it efficiently.
 
 Good Code:
 
-TODO: write a sentence or two about any code you think you did particularly well.
+I am proud of the life and scoring system and graphics.  The updating of the board array is  also good.
 
 # Using This Base Code
 
